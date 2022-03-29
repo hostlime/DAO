@@ -15,7 +15,7 @@ contract DAO  is AccessControl {
         uint256 startTime;
         bytes callData;
     }
-    // Счетчик nonce для уникализации подписей
+    
 	using Counters for Counters.Counter;
     Counters.Counter private ProposalsCnt;
 
