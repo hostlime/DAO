@@ -28,6 +28,8 @@ contract DAO  is AccessControl {
         uint256[] votingProposal;
     }
 
+    bytes32 public constant PROPOSAL_ROLE = keccak256("PROPOSAL_ROLE");
+
     // Счетчик nonce для уникализации подписей
 	using Counters for Counters.Counter;
     Counters.Counter private ProposalsCnt;
@@ -59,7 +61,7 @@ contract DAO  is AccessControl {
         bytes calldata _callData, 
         address _recipient, 
         string memory _description
-        ) external onlyRole(DEFAULT_ADMIN_ROLE){
+        ) external onlyRole(PROPOSAL_ROLE){
     	uint cnt = ProposalsCnt.current();
 
         Proposals[cnt] = _Proposal({
@@ -76,18 +78,54 @@ contract DAO  is AccessControl {
         ProposalsCnt.increment();    
     }
 
-    function vote(uint256 id, uint256 supportAgainst) external{
+    function vote(uint256 id, bool supportAgainst) external{
         require(Partisipants[msg.sender].amount > 0 , "You are not proposal");
         require(Proposals[id].startTime + DebPerDuration > block.timestamp, "The proposal is ended");
         require(PartisipantsVote[id][msg.sender].amount > 0 , "You are already vote");
 
         PartisipantsVote[id][msg.sender].amount = Partisipants[msg.sender].amount;
 
-
+        Proposals[id].quorum++;
+        if(supportAgainst){
+            Proposals[id].voteSupport += Partisipants[msg.sender].amount;
+        }else{
+            Proposals[id].voteAgainst += Partisipants[msg.sender].amount;
+        }
     }
 
     function finishProposal(uint256 id) external{
-
+        require(Proposals[id].startTime + DebPerDuration <= block.timestamp, "The proposal is not ended");
+    
+    
     }
 
 }
+
+/*
+Необходимы реализовать смарт контракт, который будет вызывать сигнатуру функции 
+посредством голосования пользователей.
+-Написать контракт DAO
+-Написать полноценные тесты к контракту
+-Написать скрипт деплоя
+-Задеплоить в тестовую сеть
+-Написать таск на vote, addProposal, finish, deposit.
+-Верифицировать контракт
+Требования
+-Для участия в голосовании пользователям необходимо внести  токены для голосования. 
+-Вывести токены с DAO, пользователи могут только после окончания всех голосований, 
+в которых они участвовали. 
+-Голосование может предложить только председатель.
+-Для участия в голосовании пользователю необходимо внести депозит, один токен один голос. 
+-Пользователь может участвовать в голосовании одними и теми же токенами, 
+то есть пользователь внес 100 токенов он может участвовать в голосовании №1 всеми 100 токенами 
+и в голосовании №2 тоже всеми 100 токенами.
+-Финишировать голосование может любой пользователь по прошествии определенного количества 
+времени установленном в конструкторе.
+Ссылки:
+презентация:
+https://docs.google.com/presentation/d/1U9iOUNTx2kMJzoPa_v3LnVbf0EGK0Lbrvoa9aewNvLg/edit?usp=sharing 
+WEB3 
+https://web3js.readthedocs.io/en/v1.2.11/web3-eth-abi.html 
+ethers
+https://docs.ethers.io/v5/api/utils/abi/coder/ 
+*/
