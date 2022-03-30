@@ -9,13 +9,26 @@ import "./TokenDao.sol";
 
 contract DAO  is AccessControl {
 
-    struct Proposal {
+    enum Status {
+        active,
+        finished
+    }
+    struct _Proposal {
         address recipient; 
         string description;
-        uint256 startTime;
+        uint256 startTime;      // время старта 
+        uint256 quorum;         // Количество проголовавших
+        uint256 voteSupport;    // Количество токенов ЗА
+        uint256 voteAgainst;    // Количество токенов ПРОТИВ
+        Status status;
         bytes callData;
     }
-    
+    struct _Partisipant {
+        uint256 amount; 
+        uint256[] votingProposal;
+    }
+
+    // Счетчик nonce для уникализации подписей
 	using Counters for Counters.Counter;
     Counters.Counter private ProposalsCnt;
 
@@ -25,7 +38,10 @@ contract DAO  is AccessControl {
     
     TokenDAO public Token;
 
-    mapping (uint256 => Proposal) public Proposals;
+    mapping (uint256 => _Proposal) public Proposals;
+    mapping (address => _Partisipant) public Partisipants;
+    mapping (uint256 => mapping (address => _Partisipant)) public PartisipantsVote;
+
     constructor (address _Token, uint256 _minimumQuorum, uint256 _debPerDuration, uint256 _requisiteMajority) {
         Token = TokenDAO(_Token);
         MinimumQuorum   = _minimumQuorum;
@@ -35,7 +51,8 @@ contract DAO  is AccessControl {
     }
 
     function deposit(uint256 amount) external {
-
+        Token.transferFrom(msg.sender, address(this), amount);
+        Partisipants[msg.sender].amount += amount;
     }
 
     function addProposal(
@@ -45,10 +62,14 @@ contract DAO  is AccessControl {
         ) external onlyRole(DEFAULT_ADMIN_ROLE){
     	uint cnt = ProposalsCnt.current();
 
-        Proposals[cnt] = Proposal({
+        Proposals[cnt] = _Proposal({
             callData: _callData, 
             recipient: _recipient, 
             startTime:  block.timestamp,
+            quorum: 0,
+            voteSupport: 0,
+            voteAgainst: 0,
+            status: Status.active,
             description: _description
         });
 
@@ -56,6 +77,12 @@ contract DAO  is AccessControl {
     }
 
     function vote(uint256 id, uint256 supportAgainst) external{
+        require(Partisipants[msg.sender].amount > 0 , "You are not proposal");
+        require(Proposals[id].startTime + DebPerDuration > block.timestamp, "The proposal is ended");
+        require(PartisipantsVote[id][msg.sender].amount > 0 , "You are already vote");
+
+        PartisipantsVote[id][msg.sender].amount = Partisipants[msg.sender].amount;
+
 
     }
 
