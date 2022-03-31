@@ -16,13 +16,17 @@ contract DAO  is AccessControl {
     struct _Proposal {
         address recipient; 
         string description;
-        uint256 startTime;      // время старта 
+        uint256 endTime;        // время завершения 
         uint256 quorum;         // Количество проголовавших
         uint256 voteSupport;    // Количество токенов ЗА
         uint256 voteAgainst;    // Количество токенов ПРОТИВ
-        Status status;
         bytes callData;
     }
+    struct _Proposals {
+        _Proposal proposal;
+        mapping (address => bool) userVote;
+    }
+
     struct _Partisipant {
         uint256 amount; 
         uint256[] votingProposal;
@@ -40,9 +44,9 @@ contract DAO  is AccessControl {
     
     TokenDAO public Token;
 
-    mapping (uint256 => _Proposal) public Proposals;
-    mapping (address => _Partisipant) public Partisipants;
-    mapping (uint256 => mapping (address => _Partisipant)) public PartisipantsVote;
+    mapping (uint256 => _Proposals) public Proposals;           // Предложения для голосования
+    mapping (address => _Partisipant) public Partisipants;      // Участники голосования
+
 
     constructor (address _Token, uint256 _minimumQuorum, uint256 _debPerDuration, uint256 _requisiteMajority) {
         Token = TokenDAO(_Token);
@@ -63,15 +67,15 @@ contract DAO  is AccessControl {
         string memory _description
         ) external onlyRole(PROPOSAL_ROLE){
     	uint cnt = ProposalsCnt.current();
-
-        Proposals[cnt] = _Proposal({
+        
+        _Proposal storage Proposal = Proposals[cnt].proposal;
+        Proposal = _Proposal({
             callData: _callData, 
             recipient: _recipient, 
-            startTime:  block.timestamp,
+            endTime:  block.timestamp + DebPerDuration,
             quorum: 0,
             voteSupport: 0,
             voteAgainst: 0,
-            status: Status.active,
             description: _description
         });
 
@@ -79,23 +83,24 @@ contract DAO  is AccessControl {
     }
 
     function vote(uint256 id, bool supportAgainst) external{
-        require(Partisipants[msg.sender].amount > 0 , "You are not proposal");
-        require(Proposals[id].startTime + DebPerDuration > block.timestamp, "The proposal is ended");
-        require(PartisipantsVote[id][msg.sender].amount > 0 , "You are already vote");
+        //require(Proposals[id].userVote[msg.sender] == true , "You are not proposal");
+        _Proposal storage Proposal = Proposals[id].proposal;
+        require(Proposal.endTime > block.timestamp, "The proposal is ended");
+        require(Proposals[id].userVote[msg.sender] == false , "You are already vote");
 
-        PartisipantsVote[id][msg.sender].amount = Partisipants[msg.sender].amount;
+        Proposals[id].userVote[msg.sender] = true;
 
-        Proposals[id].quorum++;
+        Proposal.quorum++;
         if(supportAgainst){
-            Proposals[id].voteSupport += Partisipants[msg.sender].amount;
+            Proposal.voteSupport += Partisipants[msg.sender].amount;
         }else{
-            Proposals[id].voteAgainst += Partisipants[msg.sender].amount;
+            Proposal.voteAgainst += Partisipants[msg.sender].amount;
         }
     }
 
     function finishProposal(uint256 id) external{
-        require(Proposals[id].startTime + DebPerDuration <= block.timestamp, "The proposal is not ended");
-    
+        require(Proposals[id].endTime >= block.timestamp, "The proposal is not ended");
+        //require(
     
     }
 
