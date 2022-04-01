@@ -17,7 +17,6 @@ contract DAO  is AccessControl {
         address recipient;      // Адрес смартконтракта, в котором будем вызывать функцию с сигнатурой callData
         string description;     // Описание предложения
         uint256 endTime;        // время завершения 
-        uint256 quorum;         // Количество проголовавших
         uint256 voteSupport;    // Количество токенов ЗА
         uint256 voteAgainst;    // Количество токенов ПРОТИВ
         bytes callData;         // сигнатура функции
@@ -29,12 +28,12 @@ contract DAO  is AccessControl {
 
     struct _Partisipant {
         uint256 amount; 
-        uint256 timelastProposal;   // Время заверения голосования для последнего предложения, в котором участвовал участник
+        uint256 timeLastProposalEnd;   // Время заверения голосования для последнего предложения, в котором участвовал участник
     }
 
     bytes32 public constant PROPOSAL_ROLE = keccak256("PROPOSAL_ROLE");
 
-    // Счетчик nonce для уникализации подписей
+    // Счетчик предложений для голосования
 	using Counters for Counters.Counter;
     Counters.Counter private ProposalsCnt;
 
@@ -57,9 +56,22 @@ contract DAO  is AccessControl {
     }
 
     function deposit(uint256 amount) external {
+        // переводим на контракт
         Token.transferFrom(msg.sender, address(this), amount);
+        // Учитываем количество внесенных токенов пользователем
         Partisipants[msg.sender].amount += amount;
+
         emit Deposit(msg.sender, amount);
+    }
+
+    function withdraw() external {
+        require(Partisipants[msg.sender].timeLastProposalEnd > block.timestamp, "DAO: Your tokens are reserved in voting");
+        // Возвращаем пользовател его токены
+        Token.transferFrom(address(this), msg.sender, Partisipants[msg.sender].amount);
+        // Удаляем информацию о пользователе
+        delete(Partisipants[msg.sender]);
+
+        emit Withdraw(msg.sender, amount);
     }
 
     function addProposal(
@@ -74,7 +86,6 @@ contract DAO  is AccessControl {
             recipient: _recipient, 
             description: _description,
             endTime:  block.timestamp + DebPerDuration,
-            quorum: 0,
             voteSupport: 0,
             voteAgainst: 0,
             callData: _callData
@@ -87,26 +98,34 @@ contract DAO  is AccessControl {
 
     function vote(uint256 id, bool supportAgainst) external{
         //require(Proposals[id].userVote[msg.sender] == true , "You are not proposal");
-        _Proposal storage Proposal = Proposals[id].proposal;
-        require(Proposal.endTime > block.timestamp, "The proposal is ended");
-        require(Proposals[id].userVote[msg.sender] == false , "You are already vote");
+         require(Proposal.endTime > block.timestamp, "DAO: The proposal is ended");
 
+        _Proposal storage Proposal = Proposals[id].proposal;
+        _Partisipant storage Partisipant = Partisipants[id];
+
+        // устраняем повторные голосования
+        require(Proposals[id].userVote[msg.sender] == false , "DAO: You are already vote");
         Proposals[id].userVote[msg.sender] = true;
 
-        Proposal.quorum++;
+        // учитываем голос за и против
         if(supportAgainst){
-            Proposal.voteSupport += Partisipants[msg.sender].amount;
+            Proposal.voteSupport += Partisipant.amount;
         }else{
-            Proposal.voteAgainst += Partisipants[msg.sender].amount;
+            Proposal.voteAgainst += Partisipant.amount;
         }
+
+        // Запоминаем время последнего голосования для пользователя, 
+        // чтобы потом отдавать токены по завершению всех голосований
+        Partisipants[msg.sender].timeLastProposalEnd = block.timestamp + DebPerDuration;
+
         emit Vote(id, msg.sender, supportAgainst);
     }
 
     function finishProposal(uint256 id) external{
-        require(Proposals[id].proposal.endTime >= block.timestamp, "The proposal is not ended");
+        require(Proposals[id].proposal.endTime >= block.timestamp, "DAO: The proposal is not ended");
 
 
-        //require();
+        require((Proposal.voteSupport + Proposal.voteAgainst) >= MinimumQuorum, "DAO: The proposal is not ended");
             
     }
 
@@ -120,6 +139,7 @@ contract DAO  is AccessControl {
         ); 
     event Deposit(address indexed partisipant, uint256 amount);
     event Vote(uint256 indexed  id,address indexed partisipant, bool indexed supportAgainst);
+    event Withdraw(address indexed sender, uint256 amount);
 }
 
 /*
