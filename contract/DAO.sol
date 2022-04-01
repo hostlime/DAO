@@ -14,13 +14,13 @@ contract DAO  is AccessControl {
         finished
     }
     struct _Proposal {
-        address recipient; 
-        string description;
+        address recipient;      // Адрес смартконтракта, в котором будем вызывать функцию с сигнатурой callData
+        string description;     // Описание предложения
         uint256 endTime;        // время завершения 
         uint256 quorum;         // Количество проголовавших
         uint256 voteSupport;    // Количество токенов ЗА
         uint256 voteAgainst;    // Количество токенов ПРОТИВ
-        bytes callData;
+        bytes callData;         // сигнатура функции
     }
     struct _Proposals {
         _Proposal proposal;
@@ -29,7 +29,7 @@ contract DAO  is AccessControl {
 
     struct _Partisipant {
         uint256 amount; 
-        uint256[] votingProposal;
+        uint256 timelastProposal;   // Время заверения голосования для последнего предложения, в котором участвовал участник
     }
 
     bytes32 public constant PROPOSAL_ROLE = keccak256("PROPOSAL_ROLE");
@@ -38,9 +38,8 @@ contract DAO  is AccessControl {
 	using Counters for Counters.Counter;
     Counters.Counter private ProposalsCnt;
 
-    uint256 private MinimumQuorum;
-    uint256 private DebPerDuration;
-    uint256 private RequisiteMajority;
+    uint256 private MinimumQuorum;      // Минимальное количество токенов
+    uint256 private DebPerDuration;     // Длительность голосования (сек)
     
     TokenDAO public Token;
 
@@ -48,17 +47,19 @@ contract DAO  is AccessControl {
     mapping (address => _Partisipant) public Partisipants;      // Участники голосования
 
 
-    constructor (address _Token, uint256 _minimumQuorum, uint256 _debPerDuration, uint256 _requisiteMajority) {
+    constructor (address _Token, uint256 _minimumQuorum, uint256 _debPerDuration, address _chairPerson) {
         Token = TokenDAO(_Token);
         MinimumQuorum   = _minimumQuorum;
         DebPerDuration  = _debPerDuration;
-        RequisiteMajority   = _requisiteMajority;
+
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _setupRole(PROPOSAL_ROLE, _chairPerson);
     }
 
     function deposit(uint256 amount) external {
         Token.transferFrom(msg.sender, address(this), amount);
         Partisipants[msg.sender].amount += amount;
+        emit Deposit(msg.sender, amount);
     }
 
     function addProposal(
@@ -66,20 +67,22 @@ contract DAO  is AccessControl {
         address _recipient, 
         string memory _description
         ) external onlyRole(PROPOSAL_ROLE){
+
     	uint cnt = ProposalsCnt.current();
         
-        _Proposal storage Proposal = Proposals[cnt].proposal;
-        Proposal = _Proposal({
-            callData: _callData, 
+        Proposals[cnt].proposal = _Proposal({
             recipient: _recipient, 
+            description: _description,
             endTime:  block.timestamp + DebPerDuration,
             quorum: 0,
             voteSupport: 0,
             voteAgainst: 0,
-            description: _description
+            callData: _callData
         });
 
-        ProposalsCnt.increment();    
+        ProposalsCnt.increment();  
+
+        emit AddProposal(cnt, msg.sender, _recipient, block.timestamp, Proposals[cnt].proposal.endTime, _description);  
     }
 
     function vote(uint256 id, bool supportAgainst) external{
@@ -96,14 +99,27 @@ contract DAO  is AccessControl {
         }else{
             Proposal.voteAgainst += Partisipants[msg.sender].amount;
         }
+        emit Vote(id, msg.sender, supportAgainst);
     }
 
     function finishProposal(uint256 id) external{
-        require(Proposals[id].endTime >= block.timestamp, "The proposal is not ended");
-        //require(
-    
+        require(Proposals[id].proposal.endTime >= block.timestamp, "The proposal is not ended");
+
+
+        //require();
+            
     }
 
+    event AddProposal(
+        uint256 indexed cnt, 
+        address indexed sender, 
+        address indexed recipient,
+        uint256 startTime,
+        uint256 endTime, 
+        string description
+        ); 
+    event Deposit(address indexed partisipant, uint256 amount);
+    event Vote(uint256 indexed  id,address indexed partisipant, bool indexed supportAgainst);
 }
 
 /*
