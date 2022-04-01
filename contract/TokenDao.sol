@@ -6,9 +6,6 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract TokenDAO is ERC20, AccessControl {
 
-    // Роль моста
-    bytes32 public constant BRIDGE_ROLE = keccak256("BRIDGE_ROLE");
-
     //constructor() ERC20("MyTokenForBridge", "MTK") {}
     constructor(string memory name, string memory symbol) ERC20(name, symbol) {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -16,10 +13,10 @@ contract TokenDAO is ERC20, AccessControl {
         _mint(msg.sender, 1000_000 * 10 ** decimals());
     }
 
-    function mint(address to, uint256 amount) external onlyRole(BRIDGE_ROLE) {
+    function mint(address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _mint(to, amount);
     }
-    function burn(address user, uint256 amount) external onlyRole(BRIDGE_ROLE) {
+    function burn(address user, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
         _burn(user, amount);
     }
 }
