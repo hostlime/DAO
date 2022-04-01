@@ -3,8 +3,7 @@ pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
-import "./TokenDao.sol";
-
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 
 contract DAO  is AccessControl {
@@ -39,15 +38,16 @@ contract DAO  is AccessControl {
 
     uint256 private MinimumQuorum;      // Минимальное количество токенов
     uint256 private DebPerDuration;     // Длительность голосования (сек)
-    
-    TokenDAO public Token;
+    uint256 private totalSupply;        // Общее количество токенов, которые занесены в ДАО
+
+    address private _Token;             // Токен DAO
 
     mapping (uint256 => _Proposals) public Proposals;           // Предложения для голосования
     mapping (address => _Partisipant) public Partisipants;      // Участники голосования
 
 
-    constructor (address _Token, uint256 _minimumQuorum, uint256 _debPerDuration, address _chairPerson) {
-        Token = TokenDAO(_Token);
+    constructor (address _Token_, uint256 _minimumQuorum, uint256 _debPerDuration, address _chairPerson) {
+        _Token = _Token_;
         MinimumQuorum   = _minimumQuorum;
         DebPerDuration  = _debPerDuration;
 
@@ -57,21 +57,23 @@ contract DAO  is AccessControl {
 
     function deposit(uint256 amount) external {
         // переводим на контракт
-        Token.transferFrom(msg.sender, address(this), amount);
+        IERC20(_Token).transferFrom(msg.sender, address(this), amount);
         // Учитываем количество внесенных токенов пользователем
         Partisipants[msg.sender].amount += amount;
-
+        totalSupply += amount;
         emit Deposit(msg.sender, amount);
     }
 
     function withdraw() external {
+        require(Partisipants[msg.sender].amount > 0, "DAO: You dont have tokens on DAO");
         require(Partisipants[msg.sender].timeLastProposalEnd > block.timestamp, "DAO: Your tokens are reserved in voting");
         // Возвращаем пользовател его токены
-        Token.transferFrom(address(this), msg.sender, Partisipants[msg.sender].amount);
+        IERC20(_Token).transfer(msg.sender, Partisipants[msg.sender].amount);
+        totalSupply -= Partisipants[msg.sender].amount;
         // Удаляем информацию о пользователе
         delete(Partisipants[msg.sender]);
 
-        emit Withdraw(msg.sender, amount);
+        emit Withdraw(msg.sender, Partisipants[msg.sender].amount);
     }
 
     function addProposal(
@@ -97,12 +99,12 @@ contract DAO  is AccessControl {
     }
 
     function vote(uint256 id, bool supportAgainst) external{
-        //require(Proposals[id].userVote[msg.sender] == true , "You are not proposal");
-         require(Proposal.endTime > block.timestamp, "DAO: The proposal is ended");
-
+        require(id < ProposalsCnt.current(), "DAO: Proposal with this id does not exist");
+    
         _Proposal storage Proposal = Proposals[id].proposal;
-        _Partisipant storage Partisipant = Partisipants[id];
+        _Partisipant storage Partisipant = Partisipants[msg.sender];
 
+        require(Proposal.endTime > block.timestamp, "DAO: The proposal is ended");
         // устраняем повторные голосования
         require(Proposals[id].userVote[msg.sender] == false , "DAO: You are already vote");
         Proposals[id].userVote[msg.sender] = true;
@@ -116,17 +118,25 @@ contract DAO  is AccessControl {
 
         // Запоминаем время последнего голосования для пользователя, 
         // чтобы потом отдавать токены по завершению всех голосований
-        Partisipants[msg.sender].timeLastProposalEnd = block.timestamp + DebPerDuration;
+        Partisipant.timeLastProposalEnd = block.timestamp + DebPerDuration;
 
         emit Vote(id, msg.sender, supportAgainst);
     }
 
-    function finishProposal(uint256 id) external{
-        require(Proposals[id].proposal.endTime >= block.timestamp, "DAO: The proposal is not ended");
+    function finishProposal(uint256 id) external {
+        _Proposal memory Proposal = Proposals[id].proposal;
+        // Предложение председателя истекло ?
+        require(Proposal.endTime >= block.timestamp, "DAO: The proposal is not ended");
+        // Суммартное количество токенов больше минимального порога?
+        require((Proposal.voteSupport + Proposal.voteAgainst) >= MinimumQuorum, "DAO: Not enought votes for this proposal");
+        // Количество токенов ЗА должно быть больше чем против
+        require(Proposal.voteSupport > Proposal.voteAgainst, "DAO: Support less than against");
 
+        // Вызываем наш колл с сигнатуров из callData
+        (bool success, ) = Proposal.recipient.call(Proposal.callData);
+        require(success,"DAO: ERROR call function");
 
-        require((Proposal.voteSupport + Proposal.voteAgainst) >= MinimumQuorum, "DAO: The proposal is not ended");
-            
+        delete(Proposals[id]);
     }
 
     event AddProposal(
