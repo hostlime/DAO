@@ -13,7 +13,7 @@ describe.only("DAO", function () {
   let adr3: SignerWithAddress;
   const defaultUserBalance = ethers.utils.parseEther("100");
 
-  let token: IERC20;
+  let token: any;
   let DAO: any;
   let counterCall: any;
 
@@ -24,11 +24,9 @@ describe.only("DAO", function () {
     [proposal, daoMaker, adr1, adr2, adr3] = await ethers.getSigners();
 
     // Деплоим контракт токена
-    const Token = await ethers.getContractFactory("TokenDAO") as IERC20__factory
-    token = await Token.connect(daoMaker).deploy("TokenDAO", "DAO") as TokenDAO
+    const Token = await ethers.getContractFactory("TokenDAO")
+    token = await Token.connect(daoMaker).deploy("TokenDAO", "DAO")
     await token.connect(daoMaker).deployed()
-    // Отправляем пользователям токены 
-    token.connect(daoMaker).transfer(adr1.address, defaultUserBalance)
 
     // Контракт DAO
     const DAO_ = await ethers.getContractFactory("DAO");
@@ -48,6 +46,14 @@ describe.only("DAO", function () {
     let DAO_ROLE = await counterCall.connect(daoMaker).DAO_ROLE();
     await counterCall.grantRole(DAO_ROLE, DAO.address);
 
+    // Отправляем пользователям токены 
+    token.connect(daoMaker).transfer(adr1.address, defaultUserBalance)
+    token.connect(daoMaker).transfer(adr2.address, defaultUserBalance)
+    token.connect(daoMaker).transfer(adr3.address, defaultUserBalance)
+    // Апрувим токены для контракта дао
+    token.connect(adr1).approve(DAO.address, defaultUserBalance)
+    token.connect(adr2).approve(DAO.address, defaultUserBalance)
+    token.connect(adr3).approve(DAO.address, defaultUserBalance)
   });
 
   // Проверяем все контракты на деплой
@@ -64,6 +70,13 @@ describe.only("DAO", function () {
   });
   // проверка, что у DAO есть роль BRIDGE_ROLE и контракт может минтить и сжигать токены
   it('Checking that DAO has role a DAO_ROLE', async () => {
+    const DAO_ROLE = await counterCall.connect(daoMaker).DAO_ROLE();
+    const result = await counterCall.hasRole(DAO_ROLE, DAO.address);
+    expect(result).to.be.equal(true);
+  });
+
+
+  it('Checking function deposit()', async () => {
     const DAO_ROLE = await counterCall.connect(daoMaker).DAO_ROLE();
     const result = await counterCall.hasRole(DAO_ROLE, DAO.address);
     expect(result).to.be.equal(true);
