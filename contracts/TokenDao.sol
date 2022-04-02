@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract TokenDAO is ERC20, AccessControl {
 
-    //constructor() ERC20("MyTokenForBridge", "MTK") {}
+    //constructor() ERC20("TokenDao", "DAO") {}
     constructor(string memory name, string memory symbol) ERC20(name, symbol) {
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _mint(msg.sender, 1000_000 * 10 ** decimals());

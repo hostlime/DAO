@@ -10,15 +10,17 @@ contract CounterCall is AccessControl {
     // Роль моста
     bytes32 public constant DAO_ROLE = keccak256("DAO_ROLE");
 
-    // Счетчик предложений для голосования
-    uint256 [] public Proposal;
+    uint256 public Counter;
 
     constructor(){
         _setupRole(DAO_ROLE, msg.sender);
         _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
+    function incCounter() onlyRole(DAO_ROLE) external {
+        Counter++;
+    }
 
-    function addProposal(uint256 id) onlyRole(DAO_ROLE) external {
-        Proposal.push(id);
+    function makeApiCall() external pure returns(bytes memory){
+        return abi.encodeWithSignature("addProposal()");
     }
 }
