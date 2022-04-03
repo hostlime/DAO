@@ -99,7 +99,7 @@ describe.only("DAO", function () {
       .withArgs(adr1.address, userDeposit);
   });
 
-  it.only('Checking function addProposal()', async () => {
+  it('Checking function addProposal()', async () => {
 
     const callData = counterCall.interface.encodeFunctionData("incCounter");
     const description = "First Proposal";
@@ -145,34 +145,78 @@ describe.only("DAO", function () {
     await DAO.connect(proposalAdr)
       .addProposal(callData, counterCall.address, description)
 
+    // Заносим токены в DAO
+    await DAO.connect(adr1).deposit(userDeposit);
+
     // Проверим что можно голосовать только за существующий ID
     await expect(DAO.connect(adr1)
-      .vote(callData, adr1.address, description))
+      .vote(99, true))
       .to.be.revertedWith(
-        "AccessControl: account"
+        "DAO: Proposal with this id doesn't exist"
       );
 
-    // Проверяем предложение в маппинге
-    const proposal = await DAO.proposals(0)
-    expect(proposal.recipient).to.be.equal(counterCall.address)
-    expect(proposal.description).to.be.equal(description)
-    expect(proposal.voteSupport).to.be.equal(0)
-    expect(proposal.voteAgainst).to.be.equal(0)
-    expect(proposal.callData).to.be.equal(callData)
-    // Проверяем время завершения аукциона
-    const txTime = await getTimestampBlock(tx.blockNumber)
-    expect(proposal.endTime).to.be.equal(txTime + debPerDuration)
-
-    // Проверяем эвент AddProposal
-    await expect(tx).to.emit(DAO, "AddProposal")
+    // голосуем ЗА
+    const tx = await DAO.connect(adr1).vote(0, true)
+    // Проверяем ЕВЕНТ
+    await expect(tx).to.emit(DAO, "Vote")
       .withArgs(
         0,
-        proposalAdr.address,
-        counterCall.address,
-        txTime,
-        txTime + debPerDuration,
-        description
+        adr1.address,
+        true
       );
+    // Проверяем данные в маппинге предложения
+    const proposal = await DAO.proposals(0)
+    expect(proposal.voteSupport).to.be.equal(userDeposit)
+    expect(proposal.voteAgainst).to.be.equal(0)
+
+    // Проверяем данные в маппинге пользователя
+    const partisipant = await DAO.partisipants(adr1.address)
+    expect(partisipant.amount).to.be.equal(userDeposit)
+    // Получаем время блока
+    const txTime = await getTimestampBlock(tx.blockNumber)
+    expect(partisipant.timeLastProposalEnd).to.be.equal(txTime + debPerDuration)
+
+    // Проверяем require повторного голосования
+    await expect(DAO.connect(adr1)
+      .vote(0, true))
+      .to.be.revertedWith(
+        "DAO: You are already vote"
+      );
+    // Проверяем require голосования после 3х суток
+    // Смещаем время на 10 минут
+    await ethers.provider.send("evm_increaseTime", [debPerDuration]);
+    await ethers.provider.send("evm_mine");
+
+    // Проверяем require повторного голосования
+    await expect(DAO.connect(adr2)
+      .vote(0, true))
+      .to.be.revertedWith(
+        "DAO: The proposal is ended"
+      );
+
+    /*
+        // Проверяем предложение в маппинге
+        const proposal = await DAO.proposals(0)
+        expect(proposal.recipient).to.be.equal(counterCall.address)
+        expect(proposal.description).to.be.equal(description)
+        expect(proposal.voteSupport).to.be.equal(0)
+        expect(proposal.voteAgainst).to.be.equal(0)
+        expect(proposal.callData).to.be.equal(callData)
+        // Проверяем время завершения аукциона
+        const txTime = await getTimestampBlock(tx.blockNumber)
+        expect(proposal.endTime).to.be.equal(txTime + debPerDuration)
+    
+        // Проверяем эвент AddProposal
+        await expect(tx).to.emit(DAO, "AddProposal")
+          .withArgs(
+            0,
+            proposalAdr.address,
+            counterCall.address,
+            txTime,
+            txTime + debPerDuration,
+            description
+          );
+          */
   });
 
 });
