@@ -35,7 +35,6 @@ contract DAO is AccessControl {
 
     uint256 private _minimumQuorum; // Минимальное количество токенов
     uint256 private _debPerDuration; // Длительность голосования (сек)
-    uint256 private _totalSupply; // Общее количество токенов, которые занесены в ДАО
 
     address private _token; // Токен DAO
 
@@ -61,7 +60,7 @@ contract DAO is AccessControl {
         IERC20(_token).transferFrom(msg.sender, address(this), amount);
         // Учитываем количество внесенных токенов пользователем
         partisipants[msg.sender].amount += amount;
-        _totalSupply += amount;
+
         emit Deposit(msg.sender, amount);
     }
 
@@ -74,7 +73,6 @@ contract DAO is AccessControl {
             partisipants[msg.sender].timeLastProposalEnd > block.timestamp,
             "DAO: Your tokens are reserved"
         );
-        _totalSupply -= partisipants[msg.sender].amount;
         // Возвращаем пользовател его токены
         IERC20(_token).transfer(msg.sender, partisipants[msg.sender].amount);
 
