@@ -14,7 +14,9 @@
 - Контракт счетчика CALL https://rinkeby.etherscan.io/address/0xe4b87cc4972ae7c4cc4f37c6497709f47c665e0e
 - Контракт DAO https://rinkeby.etherscan.io/address/0x7b42599b68c147f134a4c122109031443927fd46#code
 
-
+- Пример транзакции deposit https://rinkeby.etherscan.io/tx/0x7dddfea183e7c6ef2ceb2b35fa75fb7679f18049b55241bcc3dee5488324a517#eventlog
+- Пример транзакции addProposal https://rinkeby.etherscan.io/tx/0xc504dc1ab4cb0a92ee09ecdcdfcdd025555a9e75db11ea4ff47712f06b40692b
+- Пример транзакции vote https://rinkeby.etherscan.io/tx/0x638b1d0e2f4ce273d570b777f18392038dc5e8a492a4860bc59ec64e4e3d36a0
 ##### npx hardhat test:
 ```shell
   DAO
