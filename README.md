@@ -1,46 +1,45 @@
-# Advanced Sample Hardhat Project
+# DAO голосование
+Смарт контракт, который вызывает сигнатуру функции посредством голосования пользователей.
 
-This project demonstrates an advanced Hardhat use case, integrating other tools commonly used alongside Hardhat in the ecosystem.
+##### Принцип работы следующий:
+- Для участия в голосовании пользователям необходимо внести  токены для голосования. 
+- Вывести токены с DAO, пользователи могут только после окончания всех голосований, в которых они участвовали. 
+- Голосование может предложить только председатель.
+- Для участия в голосовании пользователю необходимо внести депозит, один токен один голос. 
+- Пользователь может участвовать в голосовании одними и теми же токенами, то есть пользователь внес 100 токенов он может участвовать в голосовании №1 всеми 100 токенами и в голосовании №2 тоже всеми 100 токенами.
+- Финишировать голосование может любой пользователь по прошествии определенного количества времени установленном в конструкторе.
 
-The project comes with a sample contract, a test for that contract, a sample script that deploys that contract, and an example of a task implementation, which simply lists the available accounts. It also comes with a variety of other tools, preconfigured to work with the project code.
+##### Тестовые контракты и транзакции
+- Контракт токена https://rinkeby.etherscan.io/address/0xa49ff59952215fc8371b874e901eded363f25a80
+- Контракт счетчика CALL https://rinkeby.etherscan.io/address/0xe4b87cc4972ae7c4cc4f37c6497709f47c665e0e
+- Контракт DAO https://rinkeby.etherscan.io/address/0x7b42599b68c147f134a4c122109031443927fd46#code
 
-Try running some of the following tasks:
 
+##### npx hardhat test:
 ```shell
-npx hardhat accounts
-npx hardhat compile
-npx hardhat clean
-npx hardhat test
-npx hardhat node
-npx hardhat help
-REPORT_GAS=true npx hardhat test
-npx hardhat coverage
-npx hardhat run scripts/deploy.ts
-TS_NODE_FILES=true npx ts-node scripts/deploy.ts
-npx eslint '**/*.{js,ts}'
-npx eslint '**/*.{js,ts}' --fix
-npx prettier '**/*.{json,sol,md}' --check
-npx prettier '**/*.{json,sol,md}' --write
-npx solhint 'contracts/**/*.sol'
-npx solhint 'contracts/**/*.sol' --fix
+  DAO
+    ✔ Checking that contract token is deployed
+    ✔ Checking that contract counterCall is deployed
+    ✔ Checking that contract DAO is deployed
+    ✔ Checking that DAO has role a DAO_ROLE (163ms)
+    ✔ Checking that proposal has role a PROPOSAL_ROLE (182ms)
+    ✔ Checking function deposit() (210ms)
+    ✔ Checking function withdraw() (315ms)
+    ✔ Checking function withdraw() during and after proposal (293ms)
+    ✔ Checking function addProposal() (323ms)
+    ✔ Checking function vote() (333ms)
+    ✔ Checking function finishProposal(id) vote > 50% (540ms)
+    ✔ Checking function finishProposal(id) vote < 50% (453ms)
+    ✔ Checking function finishProposal(id) vote < minimumQuorum (365ms)
 ```
-
-# Etherscan verification
-
-To try out Etherscan verification, you first need to deploy a contract to an Ethereum network that's supported by Etherscan, such as Ropsten.
-
-In this project, copy the .env.example file to a file named .env, and then edit it to fill in the details. Enter your Etherscan API key, your Ropsten node URL (eg from Alchemy), and the private key of the account which will send the deployment transaction. With a valid .env file in place, first deploy your contract:
-
+##### npx hardhat coverage:
 ```shell
-hardhat run --network ropsten scripts/deploy.ts
+------------------|----------|----------|----------|----------|----------------|
+File              |  % Stmts | % Branch |  % Funcs |  % Lines |Uncovered Lines |
+------------------|----------|----------|----------|----------|----------------|
+ contracts\       |      100 |      100 |      100 |      100 |                |
+  DAO.sol         |      100 |      100 |      100 |      100 |                |
+------------------|----------|----------|----------|----------|----------------|
+All files         |      100 |      100 |      100 |      100 |                |
+------------------|----------|----------|----------|----------|----------------|
 ```
-
-Then, copy the deployment address and paste it in to replace `DEPLOYED_CONTRACT_ADDRESS` in this command:
-
-```shell
-npx hardhat verify --network ropsten DEPLOYED_CONTRACT_ADDRESS "Hello, Hardhat!"
-```
-
-# Performance optimizations
-
-For faster runs of your tests and scripts, consider skipping ts-node's type checking by setting the environment variable `TS_NODE_TRANSPILE_ONLY` to `1` in hardhat's environment. For more details see [the documentation](https://hardhat.org/guides/typescript.html#performance-optimizations).

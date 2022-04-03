@@ -1,15 +1,13 @@
 import { expect, assert } from "chai";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import { deflateSync } from "zlib";
-import { IERC20, IERC20__factory, TokenDAO } from "../typechain";
 
 // Функция для получения timestamp блока
 async function getTimestampBlock(bn: any) {
   return (await ethers.provider.getBlock(bn)).timestamp
 }
 
-describe.only("DAO", function () {
+describe("DAO", function () {
   let proposalAdr: SignerWithAddress;  // Председатель
   let daoMaker: SignerWithAddress; // Создает конракты
   let adr1: SignerWithAddress;
@@ -98,7 +96,73 @@ describe.only("DAO", function () {
     await expect(tx).to.emit(DAO, "Deposit")
       .withArgs(adr1.address, userDeposit);
   });
+  it('Checking function withdraw()', async () => {
+    const ballance = await token.balanceOf(adr1.address)
+    await DAO.connect(adr1).deposit(userDeposit);
 
+    // Проверили что токены ушли
+    expect(await token.balanceOf(adr1.address))
+      .to.be.equal(ballance.sub(userDeposit));
+
+    // Проверяем что токены на контракте
+    expect(await token.balanceOf(DAO.address))
+      .to.be.equal(userDeposit);
+
+    // Выводим токены
+    const tx = await DAO.connect(adr1).withdraw();
+
+    // Проверяем ЭМИТ
+    await expect(tx).to.emit(DAO, "Withdraw")
+      .withArgs(
+        adr1.address,
+        userDeposit
+      );
+    // Проверяем баланс контракта и юзера
+    expect(await token.balanceOf(DAO.address))
+      .to.be.equal(0);
+    expect(await token.balanceOf(adr1.address))
+      .to.be.equal(ballance);
+
+    // Проверка onlyHasToken, пытаемсявывести еще раз
+    await expect(DAO.connect(adr1).withdraw())
+      .to.be.revertedWith(
+        "DAO: You dont have tokens on DAO"
+      );
+  });
+  it('Checking function withdraw() during and after proposal', async () => {
+
+    const callData = counterCall.interface.encodeFunctionData("incCounter");
+    const description = "First Proposal";
+    // Создаем предложение
+    await DAO.connect(proposalAdr)
+      .addProposal(callData, counterCall.address, description)
+
+    // Заносим токены в DAO
+    await DAO.connect(adr1).deposit(userDeposit);
+
+    // голосуем ЗА
+    await DAO.connect(adr1).vote(0, true)
+
+    // Пытаемся вывести токены до завершения голосования
+    await expect(DAO.connect(adr1).withdraw())
+      .to.be.revertedWith(
+        "DAO: Your tokens are reserved"
+      );
+
+    // Пропускаем три дня
+    await ethers.provider.send("evm_increaseTime", [debPerDuration]);
+    await ethers.provider.send("evm_mine", []);
+
+    // Выводим токены
+    const tx = await DAO.connect(adr1).withdraw();
+
+    // Проверяем ЭМИТ
+    await expect(tx).to.emit(DAO, "Withdraw")
+      .withArgs(
+        adr1.address,
+        userDeposit
+      );
+  });
   it('Checking function addProposal()', async () => {
 
     const callData = counterCall.interface.encodeFunctionData("incCounter");
@@ -137,7 +201,7 @@ describe.only("DAO", function () {
       );
   });
 
-  it.only('Checking function vote()', async () => {
+  it('Checking function vote()', async () => {
 
     const callData = counterCall.interface.encodeFunctionData("incCounter");
     const description = "First Proposal";
@@ -183,40 +247,175 @@ describe.only("DAO", function () {
         "DAO: You are already vote"
       );
     // Проверяем require голосования после 3х суток
-    // Смещаем время на 10 минут
     await ethers.provider.send("evm_increaseTime", [debPerDuration]);
-    await ethers.provider.send("evm_mine");
+    await ethers.provider.send("evm_mine", []);
 
     // Проверяем require повторного голосования
-    await expect(DAO.connect(adr2)
+    await expect(DAO.connect(adr1)
       .vote(0, true))
       .to.be.revertedWith(
         "DAO: The proposal is ended"
       );
 
-    /*
-        // Проверяем предложение в маппинге
-        const proposal = await DAO.proposals(0)
-        expect(proposal.recipient).to.be.equal(counterCall.address)
-        expect(proposal.description).to.be.equal(description)
-        expect(proposal.voteSupport).to.be.equal(0)
-        expect(proposal.voteAgainst).to.be.equal(0)
-        expect(proposal.callData).to.be.equal(callData)
-        // Проверяем время завершения аукциона
-        const txTime = await getTimestampBlock(tx.blockNumber)
-        expect(proposal.endTime).to.be.equal(txTime + debPerDuration)
-    
-        // Проверяем эвент AddProposal
-        await expect(tx).to.emit(DAO, "AddProposal")
-          .withArgs(
-            0,
-            proposalAdr.address,
-            counterCall.address,
-            txTime,
-            txTime + debPerDuration,
-            description
-          );
-          */
+  });
+  it('Checking function finishProposal(id) vote > 50%', async () => {
+
+    const callData = counterCall.interface.encodeFunctionData("incCounter");
+    const beforeCounter = await counterCall.connect(adr1).counter();
+
+
+    const description = "First Proposal";
+    // Создаем предложение
+    await DAO.connect(proposalAdr)
+      .addProposal(callData, counterCall.address, description)
+
+    // Заносим токены в DAO
+    await DAO.connect(adr1).deposit(userDeposit);
+    // Заносим токены в DAO
+    await DAO.connect(adr2).deposit(userDeposit);
+    // Заносим токены в DAO
+    await DAO.connect(adr3).deposit(userDeposit);
+
+    // голосуем ЗА и против
+    await DAO.connect(adr1).vote(0, true)
+    await DAO.connect(adr2).vote(0, false)
+    await DAO.connect(adr3).vote(0, true)
+
+    // Проверяем require и пытаемся завершитьраньше времени
+    await expect(DAO.connect(adr1)
+      .finishProposal(0))
+      .to.be.revertedWith(
+        "DAO: The proposal is not ended"
+      )
+
+    // Проверяем require с несуществующим id
+    await expect(DAO.connect(adr1)
+      .finishProposal(99))
+      .to.be.revertedWith(
+        "DAO: Proposal with this id doesn't exist"
+      )
+
+    // Смещаем время на 3дня
+    await ethers.provider.send("evm_increaseTime", [debPerDuration])
+    await ethers.provider.send("evm_mine", [])
+
+    // Завершаем предложение
+    const tx = await DAO.connect(adr1).finishProposal(0)
+
+    await expect(tx).to.emit(DAO, "FinishProposal")
+      .withArgs(
+        0,
+        true
+      )
+
+    // Убеждаемся что колл был вызван 
+    await expect(await counterCall.connect(adr1).counter()).to.be.equal(beforeCounter + 1)
+
+    // Проверяем статус завершения предложения в маппинге
+    const proposal = await DAO.proposals(0)
+    expect(proposal.complete).to.be.equal(true)
+
+
+    // Проверяем повторное завершение 
+    await expect(DAO.connect(adr1)
+      .finishProposal(0))
+      .to.be.revertedWith(
+        "DAO: The proposal already completed"
+      )
+  });
+  it('Checking function finishProposal(id) vote < 50%', async () => {
+
+    const callData = counterCall.interface.encodeFunctionData("incCounter");
+    const beforeCounter = await counterCall.connect(adr1).counter();
+
+
+    const description = "First Proposal";
+    // Создаем предложение
+    await DAO.connect(proposalAdr)
+      .addProposal(callData, counterCall.address, description)
+
+    // Заносим токены в DAO
+    await DAO.connect(adr1).deposit(userDeposit);
+    // Заносим токены в DAO
+    await DAO.connect(adr2).deposit(userDeposit);
+    // Заносим токены в DAO
+    await DAO.connect(adr3).deposit(userDeposit);
+
+    // голосуем ЗА и против
+    await DAO.connect(adr1).vote(0, true)
+    await DAO.connect(adr2).vote(0, false)
+    await DAO.connect(adr3).vote(0, false)
+
+    // Смещаем время на 3дня
+    await ethers.provider.send("evm_increaseTime", [debPerDuration])
+    await ethers.provider.send("evm_mine", [])
+
+    // Завершаем предложение
+    const tx = await DAO.connect(adr1).finishProposal(0)
+
+    await expect(tx).to.emit(DAO, "FinishProposal")
+      .withArgs(
+        0,
+        false
+      )
+
+    // Убеждаемся что колл НЕ был вызван 
+    await expect(await counterCall.connect(adr1).counter()).to.be.equal(beforeCounter)
+
+    // Проверяем статус завершения предложения в маппинге
+    const proposal = await DAO.proposals(0)
+    expect(proposal.complete).to.be.equal(true)
+
+    // Проверяем повторное завершение 
+    await expect(DAO.connect(adr1)
+      .finishProposal(0))
+      .to.be.revertedWith(
+        "DAO: The proposal already completed"
+      )
   });
 
+  it('Checking function finishProposal(id) vote < minimumQuorum', async () => {
+
+    const callData = counterCall.interface.encodeFunctionData("incCounter");
+    const beforeCounter = await counterCall.connect(adr1).counter();
+
+
+    const description = "First Proposal";
+    // Создаем предложение
+    await DAO.connect(proposalAdr)
+      .addProposal(callData, counterCall.address, description)
+
+    // Заносим токены в DAO
+    await DAO.connect(adr1).deposit(userDeposit);
+
+    // голосуем ЗА и против
+    await DAO.connect(adr1).vote(0, false)
+
+    // Смещаем время на 3дня
+    await ethers.provider.send("evm_increaseTime", [debPerDuration])
+    await ethers.provider.send("evm_mine", [])
+
+    // Завершаем предложение
+    const tx = await DAO.connect(adr1).finishProposal(0)
+
+    await expect(tx).to.emit(DAO, "FinishProposal")
+      .withArgs(
+        0,
+        false
+      )
+
+    // Убеждаемся что колл НЕ был вызван 
+    await expect(await counterCall.connect(adr1).counter()).to.be.equal(beforeCounter)
+
+    // Проверяем статус завершения предложения в маппинге
+    const proposal = await DAO.proposals(0)
+    expect(proposal.complete).to.be.equal(true)
+
+    // Проверяем повторное завершение 
+    await expect(DAO.connect(adr1)
+      .finishProposal(0))
+      .to.be.revertedWith(
+        "DAO: The proposal already completed"
+      )
+  });
 });
